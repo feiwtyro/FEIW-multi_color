@@ -1,3 +1,4 @@
+;务必初始状态为已启用T0耗材
 ;宏名称+temperature=[nozzle_temperature] ;传参 喷嘴温度（未指定给哪个宏用）
 ;新耗材加载前执行
 {if next_extruder == 0 && previous_extruder == -1}
@@ -6,8 +7,13 @@
   ;条件 下一色不是T0 上一色不是T-1，开始换色前准备
 ;  M600 ;暂停打印并移动到指定位置
   change_dock
-  T[previous_extruder];重新夹持旧耗材
-  change_0 T_FILAMENT=[previous_extruder];卸载旧耗材（有考虑后续加切刀）
+  {if previous_extruder == -1}
+    T0 ;重新夹持旧耗材【当上一色为T-1，执行T0】
+    change_0 T_FILAMENT=0 ;卸载旧耗材【当上一色为T-1，执行T0】
+  {else}
+    T[previous_extruder] ;重新夹持旧耗材
+    change_0 T_FILAMENT=[previous_extruder] ;卸载旧耗材（有考虑后续加切刀）
+  {endif}
 {endif}
 
 T[next_extruder]
@@ -18,9 +24,10 @@ M104 S[nozzle_temperature]
   ;条件 目标色是T0且上一色是T-1，不执行换料后处理宏
 {else}
   ;条件 下一色不是T0 上一色不是T-1，开始换色后准备
-  change_1 T_FILAMENT=[next_extruder];加载新耗材
-  UnT T_FILAMENT=[next_extruder];卸载当前耗材夹持
+  change_1 T_FILAMENT=[next_extruder] ;加载新耗材
+  UnT T_FILAMENT=[next_extruder] ;卸载当前耗材夹持
   ;冲洗gcode起始
+  M104 S[nozzle_temperature_range_high] ;新耗丝的耗材配置中最高温度
   G92 E0
   {if flush_length_1 > 1}
   ; FLUSH_START
@@ -92,18 +99,23 @@ M104 S[nozzle_temperature]
   {endif}
   ; FLUSH_START
   M400
-  ;M109 S[new_filament_temp] ;设置新的温度，等待温度到位
-  {if old_filament_temp+5 > new_filament_temp && new_filament_temp > old_filament_temp-5}
-    ;条件 新温度和旧温度温差小于5度，执行温度变化时不等待
-    M104 S[new_filament_temp] ;设置新的温度，但不等待温度到位
-  {else}
+  M109 S[new_filament_temp] ;设置新的温度，等待温度到位
+;  {if old_filament_temp+5 > new_filament_temp && new_filament_temp > old_filament_temp-5}
+;    ;条件 新温度和旧温度温差小于5度，执行温度变化时不等待
+;    M104 S[new_filament_temp] ;设置新的温度，但不等待温度到位
+;  {else}
     ;条件 新温度和旧温度温差大于5度，执行温度变化时仍然等待
-    M109 S[new_filament_temp] ;设置新的温度，等待温度到位
-  {endif}
+;    M109 S[new_filament_temp] ;设置新的温度，等待温度到位
+;  {endif}
   G1 E2 F{new_filament_e_feedrate} ;Compensate for filament spillage during waiting temperature
   ; FLUSH_END
   ;冲洗gcode结束
+  ;清理喷嘴前强冷定型垃圾
+  G92 E0
+  G1 E-[new_retract_length_toolchange] F1800
+  M106 S255
+  M400 S2
   nozzle1 ;清理喷嘴
 {endif}
 
-UnT T_FILAMENT=[next_extruder];卸载当前耗材夹持
+UnT T_FILAMENT=[next_extruder] ;卸载当前耗材夹持
